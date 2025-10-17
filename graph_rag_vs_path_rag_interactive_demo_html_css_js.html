@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Graph RAG vs Path RAG — Interactive Demo</title>
+  <style>
+    :root {
+      --bg: #0f172a;          /* slate-900 */
+      --panel: #111827;       /* gray-900 */
+      --card: #0b1220;        /* deep */
+      --muted: #93a4bc;       /* slate-400 */
+      --text: #e5eefc;        /* light */
+      --accent: #60a5fa;      /* blue-400 */
+      --accent2: #34d399;     /* emerald-400 */
+      --warn: #f59e0b;        /* amber-500 */
+      --edge: #3b82f6;        /* blue-500 */
+      --edge2: #22c55e;       /* green-500 */
+      --edge-dim: #334155;    /* slate-700 */
+      --node: #1f2937;        /* gray-800 */
+      --node-stroke: #475569; /* slate-600 */
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px; background: radial-gradient(1200px 800px at 70% -10%, #172036, var(--bg));
+      color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "IBM Plex Sans Arabic", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    h1 { font-size: 28px; margin: 0 0 10px; letter-spacing: .2px; }
+    p.sub { color: var(--muted); margin: 0 0 18px; }
+    .wrap { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
+
+    .controls { background: linear-gradient(180deg, #0e1729, #0a0f1f); border: 1px solid #13233a; border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+    .controls h2 { font-size: 18px; margin: 0 0 12px; }
+    .control { margin-bottom: 14px; }
+    label { display: block; color: var(--muted); margin-bottom: 6px; font-size: 13px; }
+    select, input[type="text"], button {
+      width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid #1f2d46; background: #0b1629; color: var(--text); outline: none;
+    }
+    select:focus, input:focus { border-color: #2a4780; box-shadow: 0 0 0 3px rgba(59,130,246,.25); }
+    button { cursor: pointer; transition: transform .05s ease, background .2s; font-weight: 600; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .btn-primary { background: linear-gradient(180deg, #1e3a8a, #1b2b5a); border-color: #27458f; }
+    .btn-secondary { background: linear-gradient(180deg, #065f46, #064135); border-color: #0f6a57; }
+    .btn-primary:hover { background: linear-gradient(180deg, #2546a9, #20356b); }
+    .btn-secondary:hover { background: linear-gradient(180deg, #0a7a5c, #08513f); }
+
+    .board { background: linear-gradient(180deg, #0c1426, #0b1020); border: 1px solid #14223b; border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px; display: grid; grid-template-rows: 36px 1fr; gap: 10px; }
+    .board-head { display: flex; align-items: center; justify-content: space-between; padding: 0 6px; }
+    .board-title { font-size: 15px; color: var(--muted); letter-spacing: .4px; }
+    .legend { display: flex; gap: 10px; align-items: center; }
+    .chip { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+    .chip > i { display: inline-block; width: 14px; height: 14px; border-radius: 999px; }
+    .chip .b { background: var(--edge); }
+    .chip .g { background: var(--edge2); }
+    .chip .y { background: var(--warn); }
+    .chip .d { background: var(--edge-dim); }
+
+    .scene { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; height: calc(100vh - 190px); min-height: 420px; }
+    .panel { position: relative; background: linear-gradient(180deg, #0b1323, #0a0f1f); border: 1px solid #13233a; border-radius: var(--radius); overflow: hidden; }
+    .panel h3 { position: absolute; top: 10px; inset-inline-start: 12px; margin: 0; font-size: 14px; color: var(--muted); z-index: 5; }
+    svg { width: 100%; height: 100%; display: block; }
+
+    .node { cursor: grab; }
+    .node circle {
+      fill: var(--node); stroke: var(--node-stroke); stroke-width: 1.5;
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,.35));
+      transition: r .1s ease;
+    }
+    .node text { font-size: 12px; fill: #d9e6ff; pointer-events: none; text-shadow: 0 1px 0 rgba(0,0,0,.5); }
+
+    .edge { stroke: var(--edge-dim); stroke-width: 2; opacity: .7; }
+    .edge.highlight-graph { stroke: var(--edge); stroke-width: 3; opacity: 1; }
+    .edge.highlight-path { stroke: var(--edge2); stroke-width: 4; opacity: 1; }
+
+    .arrow { fill: currentColor; color: var(--edge-dim); }
+    .arrow.highlight-graph { color: var(--edge); }
+    .arrow.highlight-path { color: var(--edge2); }
+
+    .weight { font-size: 11px; fill: #9fb4d9; }
+
+    .toast { position: fixed; bottom: 18px; inset-inline-start: 50%; transform: translateX(-50%); background: #0b1629; border: 1px solid #1f2d46; color: var(--text); padding: 10px 14px; border-radius: 12px; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+    .toast.show { opacity: 1; }
+
+    .footer { margin-top: 12px; color: var(--muted); font-size: 12px; text-align: center; }
+    .kbd { padding: 2px 6px; border: 1px solid #2a3d66; border-bottom-width: 2px; background: #0c1a33; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: #c8dcff; }
+  </style>
+</head>
+<body>
+  <h1>رسم تفاعلي يوضّح الفرق بين <span style="color:var(--accent)">Graph&nbsp;RAG</span> و <span style="color:var(--accent2)">Path&nbsp;RAG</span></h1>
+  <p class="sub">اختر عقد السؤال ثم جرّب «استرجاع جيران العقد» (Graph RAG) أو «إيجاد مسار علائقي أمثل» (Path RAG). يمكنك سحب العقد داخل اللوحتين لإعادة ترتيب الشبكة بصريًا.</p>
+
+  <div class="wrap">
+    <!-- Controls -->
+    <aside class="controls" id="controls">
+      <h2>الإعدادات</h2>
+
+      <div class="control">
+        <label>اختر «عقدة البداية» للسؤال</label>
+        <select id="startNode"></select>
+      </div>
+
+      <div class="control">
+        <label>اختر «عقدة الهدف» (اختياري — مطلوبة لمسار Path RAG)</label>
+        <select id="endNode"></select>
+      </div>
+
+      <div class="control row">
+        <button class="btn-primary" id="btnGraphRag">تشغيل Graph&nbsp;RAG (جيران)</button>
+        <button class="btn-secondary" id="btnPathRag">تشغيل Path&nbsp;RAG (مسار)</button>
+      </div>
+
+      <div class="control">
+        <label>عدد القفزات في Graph RAG</label>
+        <select id="hops">
+          <option value="1" selected>1-Hop</option>
+          <option value="2">2-Hop</option>
+          <option value="3">3-Hop</option>
+        </select>
+      </div>
+
+      <div class="control">
+        <label>معيار اختيار المسار (Path RAG)</label>
+        <select id="pathMetric">
+          <option value="cost" selected>أقل تكلفة (التكلفة = 1/الوزن)</option>
+          <option value="maxprod">أقصى حاصل ضرب للأوزان</option>
+          <option value="minlen">أقصر عدد حواف</option>
+        </select>
+      </div>
+
+      <div class="control">
+        <label>نص سؤال تجريبي (غير إلزامي)</label>
+        <input id="question" type="text" placeholder="مثال: كيف يؤدي التدخين إلى أمراض القلب؟" />
+      </div>
+
+      <div class="control">
+        <button id="ex1">مثال 1: التدخين → أمراض القلب</button>
+      </div>
+      <div class="control">
+        <button id="ex2">مثال 2: تلوث الهواء → الربو</button>
+      </div>
+
+      <p class="footer">تلميح: أثناء السحب استخدم <span class="kbd">Shift</span> للتبديل بين اللوحتين.</p>
+    </aside>
+
+    <!-- Boards -->
+    <main class="board">
+      <div class="board-head">
+        <div class="board-title">اللوحات التفاعلية</div>
+        <div class="legend">
+          <span class="chip"><i class="b"></i>Edges مُبرزة (Graph RAG)</span>
+          <span class="chip"><i class="g"></i>Edges مُبرزة (Path RAG)</span>
+          <span class="chip"><i class="y"></i>العقد المختارة (بداية/هدف)</span>
+          <span class="chip"><i class="d"></i>Edges خاملة</span>
+        </div>
+      </div>
+      <section class="scene">
+        <div class="panel">
+          <h3>Graph RAG — استرجاع جيران العقد</h3>
+          <svg id="svgGraph" viewBox="0 0 900 600" preserveAspectRatio="xMidYMid slice"></svg>
+        </div>
+        <div class="panel">
+          <h3>Path RAG — أفضل مسار علائقي</h3>
+          <svg id="svgPath" viewBox="0 0 900 600" preserveAspectRatio="xMidYMid slice"></svg>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast">جاهز</div>
+
+  <script>
+    // --- Graph Data (shared between the two panels) ---
+    // Nodes: id, label
+    const nodes = [
+      { id: 'smoking', label: 'التدخين' },
+      { id: 'nicotine', label: 'النيكوتين' },
+      { id: 'bp', label: 'ارتفاع ضغط الدم' },
+      { id: 'inflammation', label: 'التهاب مزمن' },
+      { id: 'atherosclerosis', label: 'تصلب الشرايين' },
+      { id: 'ldl', label: 'LDL مرتفع' },
+      { id: 'hdl', label: 'HDL منخفض' },
+      { id: 'heart', label: 'أمراض القلب' },
+      { id: 'air', label: 'تلوث الهواء الصناعي' },
+      { id: 'pm25', label: 'PM2.5 جسيمات دقيقة' },
+      { id: 'asthma', label: 'الربو' },
+      { id: 'oxidative', label: 'إجهاد تأكسدي' },
+      { id: 'co', label: 'أول أكسيد الكربون' },
+      { id: 'endothelium', label: 'خلل بطانة الأوعية' },
+      { id: 'obesity', label: 'السمنة' },
+      { id: 'diabetes', label: 'السكري' }
+    ];
+
+    // Edges: source, target, label, weight (0..1)
+    const edges = [
+      { s:'smoking', t:'nicotine', label:'يُعرّض إلى', w:0.7 },
+      { s:'nicotine', t:'bp', label:'يزيد احتمالية', w:0.6 },
+      { s:'smoking', t:'oxidative', label:'يسبب', w:0.8 },
+      { s:'oxidative', t:'endothelium', label:'يؤدي إلى', w:0.7 },
+      { s:'endothelium', t:'atherosclerosis', label:'يساهم في', w:0.75 },
+      { s:'atherosclerosis', t:'heart', label:'يرفع خطر', w:0.85 },
+      { s:'ldl', t:'atherosclerosis', label:'يساهم في', w:0.6 },
+      { s:'hdl', t:'heart', label:'يحمي من (سالب)', w:0.4 },
+      { s:'smoking', t:'ldl', label:'يرفع', w:0.55 },
+      { s:'smoking', t:'hdl', label:'يخفض', w:0.55 },
+      { s:'air', t:'pm25', label:'ينتج', w:0.8 },
+      { s:'pm25', t:'inflammation', label:'يحفّز', w:0.7 },
+      { s:'inflammation', t:'asthma', label:'يرتبط بـ', w:0.8 },
+      { s:'pm25', t:'heart', label:'يزيد مخاطر', w:0.5 },
+      { s:'co', t:'heart', label:'يقلّل الأكسجين → خطر', w:0.55 },
+      { s:'smoking', t:'co', label:'ينتج', w:0.65 },
+      { s:'obesity', t:'bp', label:'يرفع', w:0.5 },
+      { s:'diabetes', t:'heart', label:'يرفع خطر', w:0.6 }
+    ];
+
+    // Initial layout (two columns) — positions are duplicated per panel
+    const layout = {};
+    nodes.forEach((n, i) => {
+      layout[n.id] = {
+        x: (i % 4) * 210 + 120,
+        y: Math.floor(i / 4) * 120 + 110
+      };
+    });
+
+    // Populate selects
+    const startSel = document.getElementById('startNode');
+    const endSel   = document.getElementById('endNode');
+    for (const n of nodes) {
+      const o1 = document.createElement('option'); o1.value = n.id; o1.textContent = n.label; startSel.appendChild(o1);
+      const o2 = document.createElement('option'); o2.value = n.id; o2.textContent = n.label; endSel.appendChild(o2);
+    }
+    startSel.value = 'smoking';
+    endSel.value   = 'heart';
+
+    // --- SVG helpers ---
+    function makeSVG(tag, attrs) {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const k in attrs) el.setAttribute(k, attrs[k]);
+      return el;
+    }
+
+    function drawGraph(svg, positions) {
+      svg.innerHTML = '';
+      // defs: arrow marker
+      const defs = makeSVG('defs', {});
+      const mk = makeSVG('marker', { id:'arrow', viewBox:'0 0 10 10', refX:'10', refY:'5', markerWidth:'8', markerHeight:'8', orient:'auto-start-reverse' });
+      const path = makeSVG('path', { d:'M 0 0 L 10 5 L 0 10 z', class:'arrow' });
+      mk.appendChild(path); defs.appendChild(mk); svg.appendChild(defs);
+
+      // edges
+      const edgeGroup = makeSVG('g', { id:'edges' });
+      edges.forEach((e, idx) => {
+        const a = positions[e.s], b = positions[e.t];
+        const line = makeSVG('line', { x1:a.x, y1:a.y, x2:b.x, y2:b.y, class:'edge', 'data-i': idx, 'marker-end':'url(#arrow)'});
+        edgeGroup.appendChild(line);
+
+        // weight label at midpoint
+        const mx = (a.x + b.x)/2, my = (a.y + b.y)/2;
+        const wtxt = makeSVG('text', { x: mx+6, y: my-6, class:'weight' }); wtxt.textContent = `${e.label}  (w=${e.w.toFixed(2)})`;
+        edgeGroup.appendChild(wtxt);
+      });
+      svg.appendChild(edgeGroup);
+
+      // nodes
+      const nodeGroup = makeSVG('g', { id:'nodes' });
+      nodes.forEach((n) => {
+        const g = makeSVG('g', { class:'node', transform:`translate(${positions[n.id].x}, ${positions[n.id].y})`, 'data-id': n.id });
+        const c = makeSVG('circle', { r: 22 });
+        const t = makeSVG('text', { x: 0, y: 4, 'text-anchor':'middle' }); t.textContent = n.label;
+        g.appendChild(c); g.appendChild(t); nodeGroup.appendChild(g);
+      });
+      svg.appendChild(nodeGroup);
+
+      enableDrag(svg, positions);
+    }
+
+    function enableDrag(svg, positions) {
+      const ns = svg.querySelectorAll('.node');
+      let dragging = null;
+      svg.addEventListener('pointerdown', (e) => {
+        const g = e.target.closest('.node');
+        if (!g) return;
+        svg.setPointerCapture(e.pointerId);
+        dragging = { g, id: g.dataset.id, startX: e.clientX, startY: e.clientY };
+        g.querySelector('circle').style.r = 26;
+      });
+      svg.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const dx = e.clientX - dragging.startX; const dy = e.clientY - dragging.startY;
+        const p = positions[dragging.id];
+        p.x += dx; p.y += dy;
+        dragging.startX = e.clientX; dragging.startY = e.clientY;
+        dragging.g.setAttribute('transform', `translate(${p.x}, ${p.y})`);
+        // update edges
+        const edgeLines = svg.querySelectorAll('#edges line');
+        edgeLines.forEach((line, idx) => {
+          const eobj = edges[idx];
+          const a = positions[eobj.s], b = positions[eobj.t];
+          line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
+          line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
+        });
+        // update weight labels
+        const weightTexts = svg.querySelectorAll('#edges text');
+        let k = 0;
+        edges.forEach((eobj) => {
+          const a = positions[eobj.s], b = positions[eobj.t];
+          const mx = (a.x + b.x)/2, my = (a.y + b.y)/2;
+          const wtxt = weightTexts[k++];
+          wtxt.setAttribute('x', mx+6); wtxt.setAttribute('y', my-6);
+        });
+      });
+      svg.addEventListener('pointerup', (e) => {
+        if (dragging) dragging.g.querySelector('circle').style.r = 22;
+        dragging = null;
+      });
+    }
+
+    // Duplicate positions per panel to let users arrange independently
+    const posGraph = JSON.parse(JSON.stringify(layout));
+    const posPath  = JSON.parse(JSON.stringify(layout));
+
+    const svgGraph = document.getElementById('svgGraph');
+    const svgPath  = document.getElementById('svgPath');
+    drawGraph(svgGraph, posGraph);
+    drawGraph(svgPath, posPath);
+
+    // --- Highlight helpers ---
+    function resetHighlights(svg) {
+      svg.querySelectorAll('.edge').forEach(el => {
+        el.classList.remove('highlight-graph','highlight-path');
+      });
+      svg.querySelectorAll('.arrow').forEach(el => {
+        el.classList.remove('highlight-graph','highlight-path');
+      });
+      svg.querySelectorAll('.node circle').forEach(el => {
+        el.style.stroke = 'var(--node-stroke)';
+        el.style.strokeWidth = 1.5;
+        el.style.fill = 'var(--node)';
+      });
+    }
+
+    function markNode(svg, nodeId, colorVar='--warn') {
+      const g = [...svg.querySelectorAll('.node')].find(nd => nd.dataset.id === nodeId);
+      if (!g) return;
+      const c = g.querySelector('circle');
+      c.style.stroke = getComputedStyle(document.documentElement).getPropertyValue(colorVar);
+      c.style.strokeWidth = 3;
+    }
+
+    function markEdges(svg, indices, mode='graph') {
+      const lines = svg.querySelectorAll('#edges line');
+      indices.forEach(i => {
+        const ln = lines[i];
+        ln && ln.classList.add(mode==='graph' ? 'highlight-graph' : 'highlight-path');
+      });
+    }
+
+    // --- Graph RAG: K-hop neighbors from start node ---
+    function runGraphRAG(svg, hops, startId) {
+      resetHighlights(svg);
+      const adj = new Map();
+      edges.forEach((e, idx) => {
+        if (!adj.has(e.s)) adj.set(e.s, []);
+        if (!adj.has(e.t)) adj.set(e.t, []);
+        adj.get(e.s).push({ id:e.t, idx });
+        adj.get(e.t).push({ id:e.s, idx }); // treat as undirected for neighborhood
+      });
+
+      const seen = new Set([startId]);
+      const edgeIdxs = new Set();
+      let frontier = [startId];
+      for (let h=0; h<hops; h++) {
+        const next = [];
+        for (const u of frontier) {
+          const out = adj.get(u) || [];
+          for (const {id:v, idx} of out) {
+            edgeIdxs.add(idx);
+            if (!seen.has(v)) { seen.add(v); next.push(v); }
+          }
+        }
+        frontier = next;
+      }
+      markEdges(svg, [...edgeIdxs], 'graph');
+      markNode(svg, startId, '--warn');
+      toast(`Graph RAG: تم إبراز جيران العقدة «${labelOf(startId)}» حتى ${hops}-hop.`);
+    }
+
+    // --- Path RAG: best path from start -> end ---
+    function labelOf(id) { return nodes.find(n=>n.id===id)?.label || id; }
+
+    function runPathRAG(svg, startId, endId, metric) {
+      resetHighlights(svg);
+      if (!startId || !endId || startId === endId) {
+        toast('اختر عقدتي بداية وهدف مختلفتين.');
+        return;
+      }
+
+      // Build adjacency (directed)
+      const adj = new Map();
+      edges.forEach((e, idx) => {
+        if (!adj.has(e.s)) adj.set(e.s, []);
+        adj.get(e.s).push({ v:e.t, w:e.w, idx });
+        // allow weak symmetry to widen path options
+        if (!adj.has(e.t)) adj.set(e.t, []);
+        adj.get(e.t).push({ v:e.s, w: e.w*0.85, idx });
+      });
+
+      // Cost functions
+      const costFn = (w) => 1 / Math.max(0.05, w);               // smaller better
+      const negLog = (w) => -Math.log(Math.max(0.05, w));         // larger product => smaller sum
+
+      // Dijkstra / BFS depending on metric
+      const dist = new Map(nodes.map(n => [n.id, Infinity]));
+      const prev = new Map();
+      const prevEdge = new Map();
+      dist.set(startId, 0);
+      const pq = [{ id:startId, d:0 }];
+
+      function popMin() {
+        let k=0, best=0, bestD=Infinity;
+        for (const it of pq) { if (it.d < bestD) { bestD = it.d; best = k; } k++; }
+        return pq.splice(best,1)[0];
+      }
+
+      while (pq.length) {
+        const { id:u, d:du } = popMin();
+        if (u === endId) break;
+        const out = adj.get(u) || [];
+        for (const { v, w, idx } of out) {
+          let wcost = 1;
+          if (metric === 'cost') wcost = costFn(w);
+          else if (metric === 'maxprod') wcost = negLog(w);
+          else wcost = 1; // minlen
+          const nd = du + wcost;
+          if (nd < dist.get(v)) {
+            dist.set(v, nd);
+            prev.set(v, u);
+            prevEdge.set(v, idx);
+            pq.push({ id:v, d:nd });
+          }
+        }
+      }
+
+      if (!prev.has(endId)) {
+        toast('لم يتم العثور على مسار مناسب بين العقدتين.');
+        return;
+      }
+
+      // Reconstruct path
+      const pathEdges = [];
+      let cur = endId; let hops=0;
+      while (cur !== startId && prev.has(cur) && hops < 200) {
+        pathEdges.push(prevEdge.get(cur));
+        cur = prev.get(cur); hops++;
+      }
+      pathEdges.reverse();
+
+      markEdges(svg, pathEdges, 'path');
+      markNode(svg, startId, '--warn');
+      markNode(svg, endId, '--warn');
+      toast(`Path RAG: تم إبراز أفضل مسار من «${labelOf(startId)}» إلى «${labelOf(endId)}» (${metric}).`);
+    }
+
+    // --- UI bindings ---
+    const hopsSel = document.getElementById('hops');
+    const pathMetricSel = document.getElementById('pathMetric');
+
+    document.getElementById('btnGraphRag').addEventListener('click', () => {
+      runGraphRAG(svgGraph, +hopsSel.value, startSel.value);
+    });
+    document.getElementById('btnPathRag').addEventListener('click', () => {
+      runPathRAG(svgPath, startSel.value, endSel.value, pathMetricSel.value);
+    });
+
+    document.getElementById('ex1').addEventListener('click', () => {
+      startSel.value = 'smoking';
+      endSel.value = 'heart';
+      document.getElementById('question').value = 'كيف يؤدي التدخين إلى أمراض القلب؟';
+      runGraphRAG(svgGraph, 2, 'smoking');
+      runPathRAG(svgPath, 'smoking', 'heart', pathMetricSel.value);
+    });
+
+    document.getElementById('ex2').addEventListener('click', () => {
+      startSel.value = 'air';
+      endSel.value = 'asthma';
+      document.getElementById('question').value = 'ما العلاقة بين تلوث الهواء الصناعي والربو؟';
+      runGraphRAG(svgGraph, 2, 'air');
+      runPathRAG(svgPath, 'air', 'asthma', pathMetricSel.value);
+    });
+
+    // --- Toast ---
+    const toastEl = document.getElementById('toast');
+    let toastTimer;
+    function toast(msg) {
+      toastEl.textContent = msg; toastEl.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(()=> toastEl.classList.remove('show'), 2400);
+    }
+
+    // Keyboard tip: Shift while dragging to swap panel (fun extra)
+    // (We simulate by moving the node position across panels)
+    [svgGraph, svgPath].forEach((svg, idx) => {
+      svg.addEventListener('pointerup', (e) => {
+        if (!e.shiftKey) return;
+        const g = e.target.closest('.node');
+        if (!g) return;
+        const id = g.dataset.id;
+        // copy position to the other panel
+        const pFrom = idx===0 ? posGraph[id] : posPath[id];
+        const pTo   = idx===0 ? posPath[id]  : posGraph[id];
+        pTo.x = pFrom.x; pTo.y = pFrom.y;
+        drawGraph(idx===0 ? svgPath : svgGraph, idx===0 ? posPath : posGraph);
+        toast('تمت مزامنة موضع العقدة في اللوحة الأخرى.');
+      });
+    });
+  </script>
+</body>
+</html>
