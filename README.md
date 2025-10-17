@@ -1,2 +1,3 @@
 # LEARN-VISUALLY
-i created this repo to add all visual applications that helps people learn about a topic
+I created this repo to add all visual applications that help people learn about a topic
+still hasn't added anything to it, will add iteratively
